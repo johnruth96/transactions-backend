@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Account(models.Model):
-    iban = models.CharField(max_length=2)
+    iban = models.CharField(max_length=22)
     name = models.CharField(max_length=1024)
 
     def __str__(self):
