@@ -118,3 +118,18 @@ FINANCE_ENDPOINT = os.environ.get("FINANCE_ENDPOINT")
 FINANCE_RECORD_ENDPOINT = f"{FINANCE_ENDPOINT}/records/"
 FINANCE_CATEGORY_ENDPOINT = f"{FINANCE_ENDPOINT}/categories/"
 FINANCE_CONTRACT_ENDPOINT = f"{FINANCE_ENDPOINT}/contracts/"
+
+# Logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "DEBUG",
+    },
+}

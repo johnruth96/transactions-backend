@@ -1,4 +1,6 @@
+import logging
 from datetime import datetime
+from pprint import pformat
 
 from django.db import transaction
 from rest_framework import viewsets
@@ -11,10 +13,14 @@ from bank_account.api import FinanceApi
 from bank_account.models import Transaction, RecordProxy
 from bank_account.serializers import TransactionSerializer, RecordProxySerializer
 
+logger = logging.getLogger()
+
 
 def import_remote_records(data):
     with transaction.atomic():
         for record_dict in data:
+            logger.debug(f"")
+
             params = dict(
                 date=datetime.strptime(record_dict["date"], '%Y-%m-%d'),
                 subject=record_dict["subject"],
@@ -26,10 +32,11 @@ def import_remote_records(data):
 
             record = RecordProxy.objects.filter(remote_id=record_dict["id"])
             if record.exists():
+                logger.debug(f"Update RecordProxy from remote: {pformat(record_dict)}")
                 record.update(**params)
             else:
+                logger.debug(f"Create RecordProxy from remote: {pformat(record_dict)}")
                 RecordProxy.objects.create(
-                    id=record_dict["id"],
                     remote_id=record_dict["id"],
                     **params
                 )
@@ -61,21 +68,23 @@ class RecordProxyViewSet(viewsets.ModelViewSet):
         # Import
         # TODO: Parameterize date_start
         records = api.get_records(date_start="2024-09-01")
+        logger.debug(f"Successfully fetched {len(records)} records")
+
         import_remote_records(records)
-        print(f"Successfully fetched {len(records)} records")
 
         # Deletions
         records = api.get_records(date_start="2024-08-01")
         remote_ids = set(record['id'] for record in records)
         local_ids = set(RecordProxy.objects.values_list("remote_id", flat=True))
         maybe_deleted = local_ids.difference(remote_ids)
+        logger.debug(f"{len(maybe_deleted)} RecordProxy objects are possibly deleted.")
 
         for pk in maybe_deleted:
             if pk is None:
                 continue
 
             record = RecordProxy.objects.get(remote_id=pk)
-            print(f"Local Record '{record.subject}' ({record.date}) not found on Remote. Delete?")
+            logger.debug(f"Local Record '{record.subject}' ({record.date}) not found on Remote. Delete?")
             # choice = input("[n] ")
             # if choice == "y":
             #    record.delete()
