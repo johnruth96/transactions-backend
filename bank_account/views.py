@@ -1,5 +1,7 @@
+import csv
 import logging
 from datetime import datetime
+from io import StringIO
 from pprint import pformat
 
 from django.db import transaction
@@ -10,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from bank_account.api import FinanceApi
-from bank_account.models import Transaction, RecordProxy
+from bank_account.models import Transaction, RecordProxy, Account
 from bank_account.serializers import TransactionSerializer, RecordProxySerializer
 
 logger = logging.getLogger()
@@ -40,6 +42,65 @@ def import_remote_records(data):
                     remote_id=record_dict["id"],
                     **params
                 )
+
+
+def import_csv(reader: csv.reader):
+    reading_payload = False
+    contains_saldo = False
+
+    iban = None
+    name = None
+
+    transactions = []
+    for row in reader:
+        if not row:
+            continue
+
+        if row[0] == "IBAN":
+            iban = row[1].replace(" ", "").strip()
+
+        if row[0] == "Kontoname":
+            name = row[1]
+
+        if row[0] == "Saldo":
+            contains_saldo = True
+            print("File contains 'Saldo'")
+
+        if row[0] == "Buchung":
+            reading_payload = True
+            continue
+
+        if reading_payload:
+            amount_str = row[7] if contains_saldo else row[5]
+            currency = row[8] if contains_saldo else row[6]
+
+            transactions.append(dict(
+                booking_date=datetime.strptime(row[0], "%d.%m.%Y"),
+                value_date=datetime.strptime(row[1], "%d.%m.%Y"),
+                creditor=row[2],
+                transaction_type=row[3],
+                purpose=row[4],
+                amount=float(amount_str.replace(".", "").replace(",", ".")),
+                currency=currency,
+            ))
+
+    with transaction.atomic():
+        account, _ = Account.objects.get_or_create(
+            iban=iban,
+            name=name,
+        )
+
+        num_created = 0
+        for transaction_dict in transactions:
+            _, created = Transaction.objects.get_or_create(
+                account=account,
+                **transaction_dict,
+            )
+
+            if created:
+                num_created += 1
+
+        logger.debug(f"Done. Added {num_created}/{len(transactions)} transactions")
 
 
 class CategoryListView(APIView):
@@ -205,3 +266,19 @@ class TransactionViewSet(viewsets.ModelViewSet):
         t.records.set(records)
 
         return Response(data=TransactionSerializer(t).data)
+
+    @action(methods=["POST"], detail=False, url_path="import")
+    def import_csv(self, request, pk=None):
+        logger.debug(f"Process files: {request.data}")
+
+        # Except: CSV file with delimiter ";"
+        if not isinstance(request.data, list):
+            raise ValidationError()
+
+        with transaction.atomic():
+            for csv_content in request.data:
+                f = StringIO(csv_content)
+                reader = csv.reader(f, delimiter=";")
+                import_csv(reader)
+
+        return Response(status=204)
