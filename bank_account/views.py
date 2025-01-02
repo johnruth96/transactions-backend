@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from io import StringIO
 from pprint import pformat
+from urllib.request import urlopen
 
 from django.db import transaction
 from rest_framework import viewsets
@@ -64,7 +65,7 @@ def import_csv(reader: csv.reader):
 
         if row[0] == "Saldo":
             contains_saldo = True
-            print("File contains 'Saldo'")
+            logger.debug("File contains 'Saldo'")
 
         if row[0] == "Buchung":
             reading_payload = True
@@ -276,8 +277,11 @@ class TransactionViewSet(viewsets.ModelViewSet):
             raise ValidationError()
 
         with transaction.atomic():
-            for csv_content in request.data:
-                f = StringIO(csv_content)
+            for data_uri in request.data:
+                with urlopen(data_uri) as response:
+                    data = response.read()
+
+                f = StringIO(data.decode("iso-8859-1"))
                 reader = csv.reader(f, delimiter=";")
                 import_csv(reader)
 

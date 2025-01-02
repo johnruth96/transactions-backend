@@ -37,6 +37,7 @@ class Transaction(models.Model):
     purpose = models.TextField()
 
     # Meta data
+    date_created = models.DateTimeField(auto_now_add=True)
     is_ignored = models.BooleanField(default=False)
     is_counter_to = models.ForeignKey('bank_account.Transaction', on_delete=models.SET_NULL, null=True)
     is_highlighted = models.BooleanField(default=False)
